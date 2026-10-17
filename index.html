@@ -30,6 +30,7 @@
     </div>
     <nav class="tabs" id="tabs">
       <button data-tab="tasks" class="on">작업 자세</button>
+      <button data-tab="mirror">📷 내 손 미러</button>
       <button data-tab="conditions">통증·질환</button>
       <button data-tab="exercise">스트레칭</button>
       <button data-tab="touch">만져보기</button>
@@ -70,6 +71,11 @@
         <p class="hint">각도를 바꾸면 왼쪽 위 압력·위험도가 실시간으로 바뀝니다.</p>
       </div>
       <div class="step-banner hidden" id="stepBanner"></div>
+      <div class="cam hidden" id="camBox">
+        <video id="camVideo" playsinline muted></video>
+        <canvas id="camOverlay"></canvas>
+        <div class="cam-status" id="camStatus"></div>
+      </div>
     </section>
 
     <aside class="panel" id="panel">
@@ -77,6 +83,44 @@
         <p class="lead">작업을 고르면 3D 손이 그 자세를 취합니다. <b>흔한 자세</b>와 <b>권장 자세</b>를 번갈아 비교해 보세요.</p>
         <div class="cards" id="taskCards"></div>
         <div id="taskDetail"></div>
+      </div>
+
+      <div class="tab-page" data-page="mirror">
+        <div class="placard">
+          <div class="placard-head"><span>✋</span> MIRROR</div>
+          <div class="placard-body">카메라에 손을 비추면 3D 뼈가 내 손과 똑같이 움직입니다.<br /><small>영상은 이 기기 안에서만 처리되며 저장·전송되지 않습니다.</small></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="camBtn">📷 카메라 켜기</button>
+          <button class="btn alt" id="camSwap" title="오른손인데 왼손처럼 보이면 눌러 주세요">⇄ 좌우 손 바꾸기</button>
+        </div>
+        <label class="autoplay" style="margin-top:10px"><input type="checkbox" id="camWrist" /> 손목 각도도 측정 (팔 인식 · 팔꿈치까지 화면에 보이게 · 더 무거움)</label>
+        <p class="small" id="camMsg">밝은 곳에서, 카메라와 40~60cm 거리, 손 전체가 화면에 들어오게 해 주세요.</p>
+
+        <div class="box">
+          <h3>📐 내 손가락 각도</h3>
+          <table class="angles" id="angleTable"><tr><td>카메라를 켜고 손을 보여 주면 관절 각도가 표시됩니다.</td></tr></table>
+          <p class="small" id="wristRead"></p>
+        </div>
+
+        <div class="box">
+          <h3>🎯 따라하기 채점 · 힘줄 활주 운동</h3>
+          <p class="small">목표 자세를 만들고 1초 유지하면 성공! 다음 자세로 넘어갑니다.</p>
+          <div class="steps" id="mTargets"></div>
+          <div class="target-desc" id="mTargetDesc"></div>
+          <div class="score-big"><b id="mScore">–</b><span>점</span></div>
+          <div class="progress"><i id="mHold"></i></div>
+          <div class="finger-scores" id="mFingers"></div>
+          <p class="small" id="mDone"></p>
+        </div>
+        <div class="box">
+          <h3>💡 해 보세요</h3>
+          <ul>
+            <li>주먹을 천천히 쥐었다 펴며 힘줄이 손목터널을 지나 미끄러지는 모습을 보세요.</li>
+            <li>손목 각도 모드를 켜고 손목을 뒤로 젖혀 보세요. 손목터널 압력 게이지가 올라갑니다.</li>
+            <li>마우스를 쥐듯 손을 만들어 보고, 평소 습관이 어떤 각도인지 확인해 보세요.</li>
+          </ul>
+        </div>
       </div>
 
       <div class="tab-page" data-page="conditions">

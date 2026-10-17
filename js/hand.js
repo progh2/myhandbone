@@ -350,9 +350,31 @@ export class HandRig {
       f.dip.rotation.x = D(a[2]);
     });
     const t = p.t;
-    this.thumb.move.rotation.set(D(t[0]), 0, -D(t[1] - 25));
+    if (p.thumbDir) {
+      // 웹캠 측정값: 손바닥 좌표계의 엄지 중수골 방향을 그대로 적용
+      const local = p.thumbDir.clone().applyQuaternion(this.thumb.cmc.quaternion.clone().invert()).normalize();
+      this.thumb.move.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), local);
+    } else this.thumb.move.rotation.set(D(t[0]), 0, -D(t[1] - 25));
     this.thumb.mcp.rotation.x = D(t[2]);
     this.thumb.ip.rotation.x = D(t[3]);
+    this.root.updateMatrixWorld(true);
+  }
+
+  // 손(wrist2) 좌표축이 world 에서 basis(3x3, 반사 허용)가 되도록 root 행렬을 직접 지정
+  setHandWorld(basis, target) {
+    const root = this.root;
+    root.matrixAutoUpdate = false;
+    root.matrix.identity();
+    root.updateMatrixWorld(true);
+    const A = this.wrist2.matrixWorld.clone(); // root 기준 wrist2
+    const D4 = new THREE.Matrix4().setFromMatrix3(basis);
+    const palm = new THREE.Vector3(-0.45, 4.05, 0.5).applyMatrix3(basis);
+    D4.setPosition(target.clone().sub(palm));
+    root.matrix.copy(D4.multiply(A.invert()));
+    root.updateMatrixWorld(true);
+  }
+  releaseRoot() {
+    this.root.matrixAutoUpdate = true;
     this.root.updateMatrixWorld(true);
   }
 

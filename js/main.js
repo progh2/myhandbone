@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HandRig } from './hand.js';
+import { HandTracker, analyzeHand } from './mirror.js';
 import { BONES, TISSUES, NEUTRAL, TASKS, CONDITIONS, EXERCISES, TOUCH_CARDS, FRACTURES, CHECKLIST, FACTS } from './data.js';
 
 const $ = (s) => document.querySelector(s);
@@ -356,14 +357,16 @@ function setTab(tab) {
   stopExercise();
   stopCompare();
   if (tab !== 'game') game.end();
+  if (tab !== 'mirror') mirror.leave();
   if (tab !== 'conditions') state.condHL = null;
   if (tab === 'tasks') selectTask(currentTask.id, currentVariant);
   if (tab === 'conditions') selectCondition(currentCond || CONDITIONS[0].id);
   if (tab === 'exercise') selectExercise(currentEx || EXERCISES[0].id);
   if (tab === 'touch') { placeProps(null, null, TASKS.find((t) => t.id === 'rest').good.pose); goPose(TASKS.find((t) => t.id === 'rest').good.pose); }
   if (tab === 'game') game.intro();
+  if (tab === 'mirror') mirror.enter();
   if (tab === 'desk') { goPose(TASKS[0].good.pose); placeProps(TASKS[0], 'good', TASKS[0].good.pose); }
-  if (tab !== 'tasks') state.focus = { target: state.camTarget.clone(), dist: 40, dir: HOME_DIR };
+  if (tab !== 'tasks' && tab !== 'mirror') state.focus = { target: state.camTarget.clone(), dist: 40, dir: HOME_DIR };
   history.replaceState(null, '', `#${tab}`);
 }
 
@@ -588,6 +591,144 @@ const game = {
 };
 $('#gameStart').onclick = () => game.start();
 
+
+// ───────────────────────── mirror (웹캠 손 동기화)
+const MIRROR_TARGET = new THREE.Vector3(0, 8, 0);
+const GLIDE = EXERCISES.find((e) => e.id === 'glide').steps;
+const GLIDE_DESC = ['손가락을 모두 쭉 펴세요', '손가락 뿌리는 편 채, 끝 두 마디만 굽혀 갈고리', '주먹을 꽉 쥐세요', '손가락은 곧게, 뿌리 관절만 90° (테이블 모양)', '끝마디는 편 채 주먹 (손끝이 손바닥에 닿게)'];
+const FINGER_KO = ['검지', '중지', '약지', '소지'];
+const mirror = {
+  active: false, tracker: null, basis: null, sm: null, lastSeen: 0,
+  target: 0, holdStart: 0, done: 0,
+  defaultBasis() { return new THREE.Matrix3().set(-1, 0, 0, 0, 1, 0, 0, 0, 1); }, // 손바닥이 화면을 향함
+  enter() {
+    this.active = true;
+    Object.values(props).forEach((p) => (p.visible = false));
+    desk.visible = deskTop.visible = false;
+    this.basis = this.basis || this.defaultBasis();
+    state.postPose = () => rig.setHandWorld(this.basis, MIRROR_TARGET);
+    if (!this.tracker?.running) {
+      goPose({ ...clone(NEUTRAL), sup: 180, wf: 0, f: [[8, 10, 5, 4], [8, 10, 5, 0], [8, 10, 5, 4], [8, 10, 5, 8]], t: [10, 35, 5, 5] });
+    }
+    state.camTarget = MIRROR_TARGET.clone();
+    state.focus = { target: MIRROR_TARGET.clone(), dist: 36, dir: new THREE.Vector3(0, 0.1, 1) };
+    state.dirty = true;
+    this.renderTargets();
+  },
+  leave() {
+    if (!this.active) return;
+    this.active = false;
+    this.stopCam();
+    state.postPose = null;
+    rig.releaseRoot();
+    desk.visible = deskTop.visible = true;
+    state.dirty = true;
+  },
+  async startCam() {
+    const box = $('#camBox');
+    box.classList.remove('hidden');
+    if (!this.tracker) {
+      this.tracker = new HandTracker({
+        video: $('#camVideo'), overlay: $('#camOverlay'),
+        onResult: (r) => this.onResult(r),
+        onStatus: (t) => ($('#camStatus').textContent = t),
+      });
+      this.tracker.useWrist = $('#camWrist').checked;
+    }
+    $('#camBtn').disabled = true;
+    try {
+      await this.tracker.start();
+      $('#camBtn').textContent = '⏹ 카메라 끄기';
+    } catch (e) {
+      const msg = e.name === 'NotAllowedError' ? '카메라 권한이 거부되었습니다. 주소창의 카메라 아이콘에서 허용해 주세요.'
+        : e.name === 'NotFoundError' ? '카메라를 찾을 수 없습니다.' : `시작 실패: ${e.message}`;
+      $('#camStatus').textContent = msg; $('#camMsg').textContent = msg;
+      this.tracker.stop();
+    }
+    $('#camBtn').disabled = false;
+  },
+  stopCam() {
+    if (!this.tracker?.running) return;
+    this.tracker.stop();
+    $('#camBox').classList.add('hidden');
+    $('#camBtn').textContent = '📷 카메라 켜기';
+  },
+  onResult(r) {
+    if (!this.active) return;
+    if (!r) {
+      if (performance.now() - this.lastSeen > 600) $('#camStatus').textContent = '손을 찾는 중… ✋';
+      return;
+    }
+    $('#camStatus').textContent = `${r.isRight ? '오른손' : '왼손'} 인식 중${r.wf != null ? ' · 손목 각도 측정' : ''}`;
+    this.lastSeen = performance.now();
+    this.apply(r);
+  },
+  // 측정값 → 부드럽게 → 리그 자세 + 손바닥 방향
+  apply(r) {
+    const a = 0.5;
+    const L = (o, n) => (o == null ? n : o + (n - o) * a);
+    const sm = this.sm || (this.sm = {});
+    sm.f = r.f.map((row, i) => row.map((v, j) => L(sm.f?.[i][j], v)));
+    sm.t = r.t.map((v, i) => L(sm.t?.[i], v));
+    for (const k of ['X', 'Y', 'Z', 'thumbDir']) sm[k] = sm[k] ? sm[k].lerp(r[k], a).normalize() : r[k].clone();
+    if (r.wf != null) { sm.wf = L(sm.wf, r.wf); sm.wd = L(sm.wd, r.wd); sm.wristSeen = performance.now(); }
+    const wristOn = this.tracker?.useWrist && sm.wristSeen && performance.now() - sm.wristSeen < 800;
+    // 손바닥 좌표 → 카메라 좌표(왼손이면 x 반사) → 거울 화면 좌표
+    const m = (v) => (r.isRight ? new THREE.Vector3(-v.x, -v.y, -v.z) : new THREE.Vector3(v.x, -v.y, -v.z));
+    // 손목 각도 모드가 아니면 Y/Z 를 다시 직교화
+    const X = m(sm.X), Y = m(sm.Y), Z = m(sm.Z);
+    this.basis = new THREE.Matrix3().set(X.x, Y.x, Z.x, X.y, Y.y, Z.y, X.z, Y.z, Z.z);
+    const avgFlex = sm.f.reduce((s, x) => s + x[0] + x[1] + x[2], 0) / 4;
+    state.cur = {
+      sup: 180, pitch: 0, wf: wristOn ? sm.wf : 0, wd: wristOn ? sm.wd : 0,
+      f: sm.f, t: sm.t, thumbDir: sm.thumbDir,
+      load: { grip: clamp(avgFlex / 220), palm: 0, thumb: clamp((sm.t[0] + sm.t[2]) / 120), reps: 0.2 },
+    };
+    state.t = 1; state.dirty = true;
+    this.readout(sm, wristOn);
+    this.score(sm.f);
+  },
+  readout(sm, wristOn) {
+    const rows = [['엄지', '', Math.round(sm.t[2]), Math.round(sm.t[3])], ...sm.f.map((r, i) => [FINGER_KO[i], Math.round(r[0]), Math.round(r[1]), Math.round(r[2])])];
+    $('#angleTable').innerHTML = `<tr><th></th><th>MCP</th><th>PIP</th><th>DIP/IP</th></tr>` + rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1] === '' ? '–' : r[1] + '°'}</td><td>${r[2]}°</td><td>${r[3]}°</td></tr>`).join('');
+    $('#wristRead').innerHTML = wristOn
+      ? `손목 <b>${sm.wf < 0 ? `젖힘 ${Math.round(-sm.wf)}°` : `굽힘 ${Math.round(sm.wf)}°`}</b> · <b>${sm.wd >= 0 ? `척측 ${Math.round(sm.wd)}°` : `요측 ${Math.round(-sm.wd)}°`}</b>`
+      : this.tracker?.useWrist ? '팔꿈치가 보이지 않아 손목 각도를 측정하지 못했습니다.' : '손목 각도는 측정하지 않는 중 (위 체크박스로 켜기)';
+  },
+  renderTargets() {
+    $('#mTargets').innerHTML = GLIDE.map((s, i) => `<span data-i="${i}" class="${i === this.target ? 'on' : ''}">${s.label}</span>`).join('');
+    $('#mTargetDesc').innerHTML = `목표: <b>${GLIDE[this.target].label}</b> — ${GLIDE_DESC[this.target]}`;
+    $('#mDone').textContent = this.done ? `성공 ${this.done}회 🎉` : '';
+  },
+  score(f) {
+    const tgt = GLIDE[this.target].pose.f;
+    const per = f.map((r, i) => {
+      const d = (Math.abs(r[0] - tgt[i][0]) + Math.abs(r[1] - tgt[i][1]) + 0.6 * Math.abs(r[2] - tgt[i][2])) / 2.6;
+      return clamp(1 - d / 60);
+    });
+    const sc = Math.round((per.reduce((a, b) => a + b, 0) / 4) * 100);
+    $('#mScore').textContent = sc;
+    $('#mScore').parentElement.classList.toggle('ok', sc >= 75);
+    $('#mFingers').innerHTML = per.map((p, i) => `<div>${FINGER_KO[i]}<i><b style="width:${p * 100}%"></b></i></div>`).join('');
+    const now = performance.now();
+    if (sc >= 75) {
+      this.holdStart ||= now;
+      const h = clamp((now - this.holdStart) / 1000);
+      $('#mHold').style.width = `${h * 100}%`;
+      if (h >= 1) {
+        this.done++; this.holdStart = 0;
+        toast(`✅ ${GLIDE[this.target].label} 성공!`);
+        this.target = (this.target + 1) % GLIDE.length;
+        this.renderTargets();
+      }
+    } else { this.holdStart = 0; $('#mHold').style.width = '0%'; }
+  },
+};
+$('#camBtn').onclick = () => (mirror.tracker?.running ? mirror.stopCam() : mirror.startCam());
+$('#camSwap').onclick = () => { if (mirror.tracker) mirror.tracker.swap = !mirror.tracker.swap; mirror.sm = null; toast('좌우 손 인식을 바꿨습니다'); };
+$('#camWrist').onchange = async (e) => { if (mirror.tracker) await mirror.tracker.setWrist(e.target.checked); };
+$('#mTargets').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) { mirror.target = +b.dataset.i; mirror.holdStart = 0; mirror.renderTargets(); } });
+
 // ───────────────────────── desk
 const saved = JSON.parse(localStorage.getItem('mhb-check') || '{}');
 $('#deskTotal').textContent = CHECKLIST.length;
@@ -675,7 +816,7 @@ function frame() {
     state.cur = lerpPose(state.from, state.to, ease(state.t));
     state.dirty = true;
   }
-  if (state.dirty) { rig.applyPose(state.cur); rig.updateStrands(); state.dirty = false; }
+  if (state.dirty) { rig.applyPose(state.cur); state.postPose?.(); rig.updateStrands(); state.dirty = false; }
   state.floorY += (state.floorTarget - state.floorY) * Math.min(1, dt * 4);
   desk.position.y = state.floorY - 0.02; deskTop.position.y = state.floorY - 0.01;
   deskTop.position.x = state.camTarget.x; deskTop.position.z = state.camTarget.z;
@@ -705,8 +846,8 @@ controls.addEventListener('start', () => { if (state.focus?.done) state.camTarge
 // ───────────────────────── init
 rig.applyPose(state.cur);
 const [tab, sub] = (location.hash.slice(1) || 'tasks').split('/');
-if (['tasks', 'conditions', 'exercise', 'touch', 'game', 'desk'].includes(tab)) setTab(tab); else setTab('tasks');
+if (['tasks', 'mirror', 'conditions', 'exercise', 'touch', 'game', 'desk'].includes(tab)) setTab(tab); else setTab('tasks');
 if (tab === 'tasks' && sub && TASKS.find((t) => t.id === sub)) selectTask(sub);
 if (tab === 'tasks') startCompare();
-window.__mhb = { stopCompare, state, rig, camera, controls, goPose, setTab, selectTask, setVariant, assess };
+window.__mhb = { mirror, analyzeHand, stopCompare, state, rig, camera, controls, goPose, setTab, selectTask, setVariant, assess };
 frame();
