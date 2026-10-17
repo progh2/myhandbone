@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MY HAND BONE · 개발자와 디자이너를 위한 3D 손목 가이드</title>
+  <meta name="description" content="개발자·디자이너의 손과 손목을 3D 뼈로 들여다보고, 작업 자세별 위험과 올바른 자세, 스트레칭을 배우는 인터랙티브 가이드" />
+  <meta property="og:title" content="MY HAND BONE — 손목을 뼈로 보다" />
+  <meta property="og:description" content="타이핑·마우스·펜·스마트폰 자세를 3D 손뼈로 비교하고, 손목터널증후군·드퀘르뱅·방아쇠수지를 예방하세요." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦴</text></svg>" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div class="sign">
+      <span class="sign-hand">✋</span>
+      <span class="sign-word">TOUCH</span>
+    </div>
+    <div class="title">
+      <h1>MY HAND BONE</h1>
+      <p>개발자와 디자이너의 손목을 뼈로 들여다보기</p>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="tasks" class="on">작업 자세</button>
+      <button data-tab="conditions">통증·질환</button>
+      <button data-tab="exercise">스트레칭</button>
+      <button data-tab="touch">만져보기</button>
+      <button data-tab="game">골절 찾기</button>
+      <button data-tab="desk">내 책상</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="stage" id="stage">
+      <canvas id="c"></canvas>
+      <div class="hud" id="hud">
+        <div class="hud-angles" id="hudAngles"></div>
+        <div class="gauge">
+          <div class="gauge-label">손목터널 압력 <small>(추정)</small> <b id="pVal">0</b> mmHg</div>
+          <div class="gauge-bar"><i id="pBar"></i><span class="gauge-th" title="30 mmHg"></span></div>
+        </div>
+        <div class="risks" id="risks"></div>
+      </div>
+      <div class="tooltip" id="tooltip"></div>
+      <div class="view-tools">
+        <label><input type="checkbox" id="tSkin" checked /> 피부</label>
+        <label><input type="checkbox" id="tTendon" checked /> 힘줄</label>
+        <label><input type="checkbox" id="tNerve" checked /> 신경</label>
+        <label><input type="checkbox" id="tHeat" checked /> 위험 부위</label>
+        <label><input type="checkbox" id="tProps" checked /> 소품</label>
+        <button id="bManual" class="ghost">🎛 직접 조작</button>
+        <button id="bReset" class="ghost">⟲ 시점</button>
+      </div>
+      <div class="manual hidden" id="manual">
+        <div class="manual-head">직접 움직여 보기 <button class="x" id="manualClose">×</button></div>
+        <label>손목 굽힘 ↔ 젖힘 <output id="oWf"></output><input type="range" id="sWf" min="-80" max="80" step="1" /></label>
+        <label>요측(엄지쪽) ↔ 척측(새끼쪽) <output id="oWd"></output><input type="range" id="sWd" min="-25" max="40" step="1" /></label>
+        <label>전완 회전 (엎침 → 뒤침) <output id="oSup"></output><input type="range" id="sSup" min="0" max="180" step="1" /></label>
+        <label>손가락 쥐기 <output id="oGrip"></output><input type="range" id="sGrip" min="0" max="100" step="1" /></label>
+        <label>엄지 굽힘 <output id="oThumb"></output><input type="range" id="sThumb" min="-10" max="80" step="1" /></label>
+        <label>쥐는 힘 · 긴장 <output id="oLoad"></output><input type="range" id="sLoad" min="0" max="100" step="1" /></label>
+        <p class="hint">각도를 바꾸면 왼쪽 위 압력·위험도가 실시간으로 바뀝니다.</p>
+      </div>
+      <div class="step-banner hidden" id="stepBanner"></div>
+    </section>
+
+    <aside class="panel" id="panel">
+      <div class="tab-page on" data-page="tasks">
+        <p class="lead">작업을 고르면 3D 손이 그 자세를 취합니다. <b>흔한 자세</b>와 <b>권장 자세</b>를 번갈아 비교해 보세요.</p>
+        <div class="cards" id="taskCards"></div>
+        <div id="taskDetail"></div>
+      </div>
+
+      <div class="tab-page" data-page="conditions">
+        <p class="lead">개발자·디자이너에게 흔한 손·손목 통증입니다. 카드를 누르면 관련 구조가 3D에서 빛납니다.</p>
+        <div class="cond-list" id="condList"></div>
+        <div id="condDetail"></div>
+      </div>
+
+      <div class="tab-page" data-page="exercise">
+        <p class="lead">3D 손을 따라 해 보세요. 통증이 없는 범위에서 부드럽게.</p>
+        <div class="cards" id="exCards"></div>
+        <div id="exDetail"></div>
+        <div class="box">
+          <h3>⏱ 마이크로 브레이크 알림</h3>
+          <p class="small">정해진 시간마다 알림을 보내고 힘줄 활주 운동을 재생합니다. (이 탭이 열려 있어야 동작)</p>
+          <div class="row">
+            <label>간격 <select id="breakMin"><option>20</option><option selected>30</option><option>45</option><option>60</option></select> 분</label>
+            <button id="breakBtn" class="btn">시작</button>
+            <span id="breakLeft" class="mono"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-page" data-page="touch">
+        <div class="placard">
+          <div class="placard-head"><span>✋</span> TOUCH</div>
+          <div class="placard-body">지금 내 손을 직접 만져 보세요. 화면 속 뼈가 바로 그 아래에 있습니다.</div>
+        </div>
+        <div id="touchCards" class="touch-list"></div>
+        <div class="box">
+          <h3>💡 알고 계셨나요?</h3>
+          <div class="facts" id="facts"></div>
+        </div>
+        <div class="box">
+          <h3>🦴 뼈 목록</h3>
+          <p class="small">3D 화면에서 뼈를 클릭해도 설명이 나옵니다.</p>
+          <div id="boneList" class="bone-list"></div>
+        </div>
+      </div>
+
+      <div class="tab-page" data-page="game">
+        <div class="placard">
+          <div class="placard-head"><span>✋</span> TOUCH</div>
+          <div class="placard-body">Feel the hand. Can you tell where the bone is broken?<br /><small>손을 돌려 보세요. 어디가 부러졌을까요?</small></div>
+        </div>
+        <p class="small">맨체스터 전시의 축구선수 발 뼈 부스에서 영감을 받은 미니 게임. 뼈 하나에 금이 가 있습니다. 화면을 돌려 찾아 클릭하세요.</p>
+        <div class="row"><button class="btn" id="gameStart">새 문제</button> <span id="gameScore" class="mono"></span></div>
+        <div id="gameMsg" class="game-msg"></div>
+      </div>
+
+      <div class="tab-page" data-page="desk">
+        <div class="box">
+          <h3>✅ 내 작업환경 점검</h3>
+          <div class="score"><b id="deskScore">0</b> / <span id="deskTotal"></span></div>
+          <div id="checklist" class="checklist"></div>
+        </div>
+        <div class="box">
+          <h3>⌨️ 내 손가락의 하루</h3>
+          <div class="calc">
+            <label>타자 속도 <input type="number" id="cSpeed" value="300" min="50" max="1200" /> 타/분</label>
+            <label>하루 실제 타이핑 <input type="number" id="cHours" value="2.5" step="0.5" min="0.5" max="14" /> 시간</label>
+            <label>키 누르는 힘 <input type="number" id="cForce" value="55" min="20" max="120" /> g</label>
+          </div>
+          <div id="calcOut" class="calc-out"></div>
+        </div>
+      </div>
+
+      <footer class="disclaimer">
+        이 사이트는 교육용 시각화입니다. 뼈 모델과 압력·위험도 수치는 연구를 바탕으로 한 <b>단순화된 근사치</b>이며 의학적 진단을 대신하지 않습니다. 증상이 지속되면 전문의와 상담하세요.
+      </footer>
+    </aside>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
