@@ -6,6 +6,7 @@ import { HandTracker, analyzeHand } from './mirror.js';
 import { BONES, TISSUES, NEUTRAL, TASKS, CONDITIONS, EXERCISES, TOUCH_CARDS, FRACTURES, CHECKLIST, FACTS } from './data.js';
 
 const $ = (s) => document.querySelector(s);
+const START_HASH = location.hash;
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const clone = (p) => JSON.parse(JSON.stringify(p));
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -231,12 +232,12 @@ function goPose(pose, dur = 0.9) {
 
 // ───────────────────────── risk model (단순 근사)
 const RISKS = [
-  { id: 'cts', name: '손목터널', color: '#ffcf4a', ids: ['median', 'tcl'] },
-  { id: 'dq', name: '드퀘르뱅', color: '#ff8a5c', ids: ['dq'] },
-  { id: 'ulnar', name: '척골신경', color: '#7ad7ff', ids: ['ulnar', 'pisiform'] },
-  { id: 'trigger', name: '방아쇠수지', color: '#ff6fa5', ids: ['a1'] },
-  { id: 'cmc', name: '엄지 CMC', color: '#c89bff', ids: ['trapezium', 'mc0'] },
-  { id: 'rsi', name: 'RSI·폄근', color: '#5ef0b4', ids: ['extensor'] },
+  { id: 'cts', name: '손 저림', color: '#ffcf4a', ids: ['median', 'tcl'] },
+  { id: 'dq', name: '엄지 쪽 손목', color: '#ff8a5c', ids: ['dq'] },
+  { id: 'ulnar', name: '새끼손가락 저림', color: '#7ad7ff', ids: ['ulnar', 'pisiform'] },
+  { id: 'trigger', name: '손가락 걸림', color: '#ff6fa5', ids: ['a1'] },
+  { id: 'cmc', name: '엄지 뿌리', color: '#c89bff', ids: ['trapezium', 'mc0'] },
+  { id: 'rsi', name: '손등·팔 뻐근', color: '#5ef0b4', ids: ['extensor'] },
 ];
 function assess(p) {
   const ext = Math.max(0, -p.wf), flex = Math.max(0, p.wf), uln = Math.max(0, p.wd), rad = Math.max(0, -p.wd);
@@ -259,10 +260,14 @@ riskEl.innerHTML = RISKS.map((r) => `<div class="risk"><span>${r.name}</span><di
 let lastHud = 0;
 function updateHud(a) {
   const p = state.cur;
-  const wfTxt = p.wf < -1 ? `젖힘 <b>${Math.round(-p.wf)}°</b>` : p.wf > 1 ? `굽힘 <b>${Math.round(p.wf)}°</b>` : '<b>중립</b>';
-  const wdTxt = p.wd > 1 ? `척측 <b>${Math.round(p.wd)}°</b>` : p.wd < -1 ? `요측 <b>${Math.round(-p.wd)}°</b>` : '<b>일직선</b>';
-  const supTxt = p.sup < 30 ? '엎침(손바닥 아래)' : p.sup < 120 ? '악수 자세' : '뒤침(손바닥 위)';
-  $('#hudAngles').innerHTML = `손목 ${wfTxt} · ${wdTxt}<br>전완 <b>${supTxt}</b>`;
+  const wfTxt = p.wf < -3 ? `뒤로 <b>${Math.round(-p.wf)}°</b> 젖혀짐` : p.wf > 3 ? `안으로 <b>${Math.round(p.wf)}°</b> 굽어짐` : '<b>곧음 👍</b>';
+  const wdTxt = p.wd > 3 ? ` · 새끼 쪽으로 <b>${Math.round(p.wd)}°</b> 휨` : p.wd < -3 ? ` · 엄지 쪽으로 <b>${Math.round(-p.wd)}°</b> 휨` : '';
+  $('#hudAngles').innerHTML = `손목: ${wfTxt}${wdTxt}`;
+  const worst = Math.max(...RISKS.map((r) => a[r.id]));
+  const lvl = worst > 0.6 ? ['😣', '부담 커요', 'bad'] : worst > 0.35 ? ['😐', '조금 부담돼요', 'mid'] : ['😌', '편안해요', 'good'];
+  const top = RISKS.filter((r) => a[r.id] > 0.35).sort((x, y) => a[y.id] - a[x.id]).slice(0, 2).map((r) => r.name);
+  $('#hudLevel').className = `hud-level ${lvl[2]}`;
+  $('#hudLevel').innerHTML = `<span>${lvl[0]}</span><div><b>손목 ${lvl[1]}</b>${top.length ? `<small>주의: ${top.join(', ')}</small>` : '<small>지금 자세는 괜찮아요</small>'}</div>`;
   $('#pVal').textContent = Math.round(a.P);
   $('#pBar').style.width = `${clamp(a.P / 60) * 100}%`;
   for (const r of RISKS) {
@@ -270,6 +275,7 @@ function updateHud(a) {
     $(`#rv-${r.id}`).textContent = Math.round(a[r.id] * 100);
   }
 }
+$('#hudMore').onclick = () => { const h = $('#hud'); h.classList.toggle('open'); $('#hudMore').textContent = h.classList.contains('open') ? '접기 ▴' : '자세히 ▾'; };
 
 // ───────────────────────── highlight
 const tmpC = new THREE.Color();
@@ -308,7 +314,7 @@ canvas.addEventListener('pointermove', (ev) => {
   if (id && !game.active) {
     const i = info(id);
     const r = canvas.getBoundingClientRect();
-    tip.innerHTML = `${i.ko}<small>${i.en}</small>`;
+    tip.innerHTML = `${i.nick}<small>${i.ko} · ${i.en}</small>`;
     tip.style.left = `${ev.clientX - r.left}px`;
     tip.style.top = `${ev.clientY - r.top}px`;
     tip.style.opacity = 1;
@@ -329,7 +335,7 @@ $('#stage').appendChild(infoCard);
 function showInfo(id) {
   state.selected = id;
   const i = info(id);
-  infoCard.innerHTML = `<button class="x">×</button><div class="ic-group">${i.group || '연부조직'}</div><h4>${i.ko} <small>${i.en}</small></h4><p>${i.desc}</p>`;
+  infoCard.innerHTML = `<button class="x">×</button><div class="ic-group">${i.group || '힘줄·신경'}</div><h4>${i.nick}</h4><div class="ic-sub">${i.ko} · ${i.en}</div><p>${i.desc}</p>`;
   infoCard.classList.remove('hidden');
   infoCard.querySelector('.x').onclick = hideInfo;
 }
@@ -346,7 +352,7 @@ function focusOn(id) {
 // ───────────────────────── tabs
 let currentTab = 'tasks';
 $('#tabs').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
+  const b = e.target.closest('button[data-tab]');
   if (!b) return;
   setTab(b.dataset.tab);
 });
@@ -398,15 +404,15 @@ function renderTaskDetail() {
   const t = currentTask;
   const riskTags = (pose) => {
     const a = assess(pose);
-    return RISKS.filter((r) => a[r.id] > 0.45).map((r) => `<span class="tag" style="border-color:${r.color}">${r.name} ${Math.round(a[r.id] * 100)}</span>`).join('') || '<span class="tag">위험 낮음</span>';
+    return RISKS.filter((r) => a[r.id] > 0.45).map((r) => `<span class="tag" style="border-color:${r.color}">${r.name} ${Math.round(a[r.id] * 100)}</span>`).join('') || '<span class="tag">부담 적음 👍</span>';
   };
   $('#taskDetail').innerHTML = `
     <h3>${t.icon} ${t.name}</h3>
     <p class="small">${t.intro}</p>
-    ${t.bad ? `<div class="seg"><button class="bad" data-v="bad">😣 흔한 자세</button><button class="good" data-v="good">😌 권장 자세</button></div>
-    <label class="autoplay"><input type="checkbox" id="cmpAuto"> 3초마다 자동 비교</label>` : ''}
-    ${t.bad ? `<div class="box bad"><b>무엇이 문제일까</b><ul>${t.bad.points.map((x) => `<li>${x}</li>`).join('')}</ul><div class="tags">${riskTags(t.bad.pose)}</div></div>` : ''}
-    <div class="box good"><b>${t.bad ? '이렇게 바꿔 보세요' : '포인트'}</b><ul>${t.good.points.map((x) => `<li>${x}</li>`).join('')}</ul><div class="tags">${riskTags(t.good.pose)}</div></div>`;
+    ${t.bad ? `<div class="seg"><button class="bad" data-v="bad">😣 아픈 자세</button><button class="good" data-v="good">😌 좋은 자세</button></div>
+    <label class="autoplay"><input type="checkbox" id="cmpAuto"> 두 자세 번갈아 보기</label>` : ''}
+    ${t.bad ? `<div class="box bad"><b>😣 왜 안 좋을까요?</b><ul>${t.bad.points.map((x) => `<li>${x}</li>`).join('')}</ul><div class="tags">${riskTags(t.bad.pose)}</div></div>` : ''}
+    <div class="box good"><b>${t.bad ? '😌 이렇게 바꿔 보세요' : '포인트'}</b><ul>${t.good.points.map((x) => `<li>${x}</li>`).join('')}</ul><div class="tags">${riskTags(t.good.pose)}</div></div>`;
   $('#taskDetail').querySelectorAll('.seg button').forEach((b) => (b.onclick = () => { stopCompare(); setVariant(b.dataset.v); }));
   const auto = $('#cmpAuto');
   if (auto) auto.onchange = () => (auto.checked ? startCompare() : stopCompare());
@@ -423,7 +429,7 @@ function stopCompare() {
 
 // ───────────────────────── conditions
 let currentCond = null;
-$('#condList').innerHTML = CONDITIONS.map((c) => `<button class="cond" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><b>${c.name}</b><small>${c.en}</small></button>`).join('');
+$('#condList').innerHTML = CONDITIONS.map((c) => `<button class="cond" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><b>${c.name}</b><small>${c.sub}</small></button>`).join('');
 $('#condList').addEventListener('click', (e) => { const b = e.target.closest('.cond'); if (b) selectCondition(b.dataset.id); });
 function selectCondition(id) {
   currentCond = id;
@@ -437,15 +443,15 @@ function selectCondition(id) {
   const tasks = TASKS.filter((t) => t.bad && assess(t.bad.pose)[c.id] > 0.45);
   $('#condDetail').innerHTML = `
     <div class="box" style="border-left:4px solid ${c.color}">
-      <h3>${c.name}</h3><p class="small">${c.summary}</p>
-      <div class="tags">${c.highlight.map((h) => `<span class="tag" data-focus="${h}">${info(h).ko}</span>`).join('')}</div>
+      <h3>${c.name} <small class="small">${c.sub}</small></h3><p class="small">${c.summary}</p><p class="small">👇 관련된 부위 (누르면 3D에서 보여요)</p>
+      <div class="tags">${c.highlight.map((h) => `<span class="tag" data-focus="${h}">${info(h).nick}</span>`).join('')}</div>
     </div>
-    <div class="box"><b>증상</b><ul>${c.symptoms.map((x) => `<li>${x}</li>`).join('')}</ul></div>
-    <div class="box bad"><b>이런 작업 습관이 원인</b><ul>${c.work.map((x) => `<li>${x}</li>`).join('')}</ul>
+    <div class="box"><b>🩺 이런 느낌이에요</b><ul>${c.symptoms.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+    <div class="box bad"><b>💻 이런 습관이 원인이에요</b><ul>${c.work.map((x) => `<li>${x}</li>`).join('')}</ul>
       ${tasks.length ? `<div class="tags">${tasks.map((t) => `<span class="tag" data-task="${t.id}">${t.icon} ${t.name} 자세 보기</span>`).join('')}</div>` : ''}</div>
-    <div class="box good"><b>예방</b><ul>${c.prevent.map((x) => `<li>${x}</li>`).join('')}</ul></div>
-    ${test ? `<div class="box"><b>자가체크: ${test.name}</b><p class="small">${test.desc}</p><button class="btn" data-ex="${test.id}">3D로 따라하기</button></div>` : ''}
-    <div class="box"><b>🏥 이럴 땐 병원으로</b><p class="small">${c.doctor}</p></div>`;
+    <div class="box good"><b>✅ 이렇게 예방해요</b><ul>${c.prevent.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+    ${test ? `<div class="box"><b>🙋 집에서 확인해 보기: ${test.name}</b><p class="small">${test.desc}</p><button class="btn" data-ex="${test.id}">3D로 따라하기</button></div>` : ''}
+    <div class="box"><b>🏥 이럴 땐 병원에 가세요</b><p class="small">${c.doctor}</p></div>`;
   $('#condDetail').querySelectorAll('[data-focus]').forEach((b) => (b.onclick = () => { focusOn(b.dataset.focus); showInfo(b.dataset.focus); }));
   $('#condDetail').querySelectorAll('[data-task]').forEach((b) => (b.onclick = () => { setTab('tasks'); selectTask(b.dataset.task, 'bad'); }));
   $('#condDetail').querySelectorAll('[data-ex]').forEach((b) => (b.onclick = () => { setTab('exercise'); selectExercise(b.dataset.ex); }));
@@ -542,7 +548,7 @@ $('#touchCards').addEventListener('click', (e) => {
   focusOn(b.dataset.bone); showInfo(b.dataset.bone);
 });
 $('#facts').innerHTML = FACTS.map((f) => `<div class="fact"><b>${f.big}</b><span>${f.text}</span></div>`).join('');
-$('#boneList').innerHTML = Object.entries(BONES).map(([id, b]) => `<span class="tag" data-bone="${id}">${b.ko}</span>`).join('');
+$('#boneList').innerHTML = Object.entries(BONES).map(([id, b]) => `<span class="tag" data-bone="${id}">${b.nick}</span>`).join('');
 $('#boneList').addEventListener('click', (e) => { const b = e.target.closest('[data-bone]'); if (b) { focusOn(b.dataset.bone); showInfo(b.dataset.bone); } });
 
 // ───────────────────────── game
@@ -576,7 +582,7 @@ const game = {
       this.cur = null;
     } else {
       const hint = this.tries >= 3 ? `<br>힌트: <b>${BONES[this.cur.bone].group}</b> 쪽을 살펴보세요.` : '';
-      $('#gameMsg').innerHTML = `<div class="box bad">그건 <b>${BONES[id].ko}</b>예요. 다시 찾아보세요!${hint}</div>`;
+      $('#gameMsg').innerHTML = `<div class="box bad">그건 <b>${BONES[id].nick}</b>예요. 다시 찾아보세요!${hint}</div>`;
     }
     $('#gameScore').textContent = `점수 ${this.score} / ${this.rounds}`;
   },
@@ -593,9 +599,23 @@ $('#gameStart').onclick = () => game.start();
 
 
 // ───────────────────────── mirror (웹캠 손 동기화)
+// 카카오톡·인스타그램 등 앱 안 브라우저는 카메라를 막는 경우가 많음
+const UA = navigator.userAgent;
+const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const IN_APP_MSG = /KAKAOTALK/i.test(UA)
+  ? '카카오톡 안에서는 카메라를 쓸 수 없어요. 오른쪽 아래(또는 위) ⋮ 메뉴 → "다른 브라우저로 열기"를 눌러 주세요. <a href="kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href) + '">👉 바로 열기</a>'
+  : '앱 안의 브라우저에서는 카메라가 막혀 있어요. 메뉴에서 "브라우저로 열기"(크롬/사파리)를 눌러 주세요.';
+// 휴대폰에서 카메라 인식 중엔 그래픽을 가볍게
+const MOBILE = matchMedia('(pointer: coarse)').matches;
+function setLite(on) {
+  if (!MOBILE) return;
+  renderer.setPixelRatio(on ? 1 : Math.min(devicePixelRatio, 2));
+  key.castShadow = !on;
+  resize();
+}
 const MIRROR_TARGET = new THREE.Vector3(0, 8, 0);
 const GLIDE = EXERCISES.find((e) => e.id === 'glide').steps;
-const GLIDE_DESC = ['손가락을 모두 쭉 펴세요', '손가락 뿌리는 편 채, 끝 두 마디만 굽혀 갈고리', '주먹을 꽉 쥐세요', '손가락은 곧게, 뿌리 관절만 90° (테이블 모양)', '끝마디는 편 채 주먹 (손끝이 손바닥에 닿게)'];
+const GLIDE_DESC = ['손가락을 모두 쭉 펴세요', '손가락 끝 두 마디만 굽혀서 갈고리 모양', '주먹을 꽉 쥐세요', '손가락은 곧게 편 채, 뿌리만 직각으로 굽혀 책상 모양', '끝 마디는 편 채로 주먹 (손끝이 손바닥에 닿게)'];
 const FINGER_KO = ['검지', '중지', '약지', '소지'];
 const mirror = {
   active: false, tracker: null, basis: null, sm: null, lastSeen: 0,
@@ -614,6 +634,7 @@ const mirror = {
     state.focus = { target: MIRROR_TARGET.clone(), dist: 36, dir: new THREE.Vector3(0, 0.1, 1) };
     state.dirty = true;
     this.renderTargets();
+    if (IN_APP) this.showCamError(IN_APP_MSG);
   },
   leave() {
     if (!this.active) return;
@@ -626,7 +647,9 @@ const mirror = {
   },
   async startCam() {
     const box = $('#camBox');
+    if (IN_APP) { this.showCamError(IN_APP_MSG); return; }
     box.classList.remove('hidden');
+    if (innerWidth < 900) $('#stage').scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (!this.tracker) {
       this.tracker = new HandTracker({
         video: $('#camVideo'), overlay: $('#camOverlay'),
@@ -636,22 +659,35 @@ const mirror = {
       this.tracker.useWrist = $('#camWrist').checked;
     }
     $('#camBtn').disabled = true;
+    $('#camBtn').textContent = '준비 중…';
     try {
       await this.tracker.start();
       $('#camBtn').textContent = '⏹ 카메라 끄기';
+      $('#camMsg').textContent = '손 전체가 화면에 나오게, 40~60cm 떨어져서 비춰 주세요.';
+      setLite(true);
     } catch (e) {
-      const msg = e.name === 'NotAllowedError' ? '카메라 권한이 거부되었습니다. 주소창의 카메라 아이콘에서 허용해 주세요.'
-        : e.name === 'NotFoundError' ? '카메라를 찾을 수 없습니다.' : `시작 실패: ${e.message}`;
-      $('#camStatus').textContent = msg; $('#camMsg').textContent = msg;
+      console.warn(e);
+      const msg = e.name === 'NotAllowedError' ? '카메라 사용이 거부됐어요. 주소창 옆 🔒(또는 aA) 버튼 → 카메라 → 허용으로 바꾼 뒤 새로고침해 주세요.'
+        : e.name === 'NotFoundError' || e.name === 'OverconstrainedError' ? '이 기기에서 카메라를 찾을 수 없어요.'
+        : e.name === 'NotReadableError' ? '다른 앱이 카메라를 쓰고 있어요. 영상통화·카메라 앱을 닫고 다시 시도해 주세요.'
+        : e.name === 'NoGetUserMedia' ? '이 브라우저에서는 카메라를 쓸 수 없어요. 크롬이나 사파리로 열어 주세요.'
+        : `카메라를 시작하지 못했어요 (${e.message}). 크롬이나 사파리 최신 버전으로 열어 주세요.`;
       this.tracker.stop();
+      this.showCamError(msg);
+      $('#camBtn').textContent = '📷 카메라 켜기';
     }
     $('#camBtn').disabled = false;
+  },
+  showCamError(msg) {
+    $('#camMsg').innerHTML = `<span class="cam-err">⚠️ ${msg}</span>`;
+    $('#camStatus').textContent = msg;
   },
   stopCam() {
     if (!this.tracker?.running) return;
     this.tracker.stop();
     $('#camBox').classList.add('hidden');
     $('#camBtn').textContent = '📷 카메라 켜기';
+    setLite(false);
   },
   onResult(r) {
     if (!this.active) return;
@@ -690,10 +726,10 @@ const mirror = {
   },
   readout(sm, wristOn) {
     const rows = [['엄지', '', Math.round(sm.t[2]), Math.round(sm.t[3])], ...sm.f.map((r, i) => [FINGER_KO[i], Math.round(r[0]), Math.round(r[1]), Math.round(r[2])])];
-    $('#angleTable').innerHTML = `<tr><th></th><th>MCP</th><th>PIP</th><th>DIP/IP</th></tr>` + rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1] === '' ? '–' : r[1] + '°'}</td><td>${r[2]}°</td><td>${r[3]}°</td></tr>`).join('');
+    $('#angleTable').innerHTML = `<tr><th></th><th>뿌리 마디</th><th>가운데 마디</th><th>끝 마디</th></tr>` + rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1] === '' ? '–' : r[1] + '°'}</td><td>${r[2]}°</td><td>${r[3]}°</td></tr>`).join('');
     $('#wristRead').innerHTML = wristOn
-      ? `손목 <b>${sm.wf < 0 ? `젖힘 ${Math.round(-sm.wf)}°` : `굽힘 ${Math.round(sm.wf)}°`}</b> · <b>${sm.wd >= 0 ? `척측 ${Math.round(sm.wd)}°` : `요측 ${Math.round(-sm.wd)}°`}</b>`
-      : this.tracker?.useWrist ? '팔꿈치가 보이지 않아 손목 각도를 측정하지 못했습니다.' : '손목 각도는 측정하지 않는 중 (위 체크박스로 켜기)';
+      ? `손목: <b>${sm.wf < 0 ? `뒤로 ${Math.round(-sm.wf)}° 젖혀짐` : `안으로 ${Math.round(sm.wf)}° 굽어짐`}</b> · <b>${sm.wd >= 0 ? `새끼 쪽 ${Math.round(sm.wd)}°` : `엄지 쪽 ${Math.round(-sm.wd)}°`}</b>`
+      : this.tracker?.useWrist ? '팔꿈치가 화면에 안 보여서 손목 각도는 못 쟀어요.' : '손목 각도도 보려면 위의 "손목 각도도 재기"를 켜 주세요.';
   },
   renderTargets() {
     $('#mTargets').innerHTML = GLIDE.map((s, i) => `<span data-i="${i}" class="${i === this.target ? 'on' : ''}">${s.label}</span>`).join('');
@@ -849,5 +885,16 @@ const [tab, sub] = (location.hash.slice(1) || 'tasks').split('/');
 if (['tasks', 'mirror', 'conditions', 'exercise', 'touch', 'game', 'desk'].includes(tab)) setTab(tab); else setTab('tasks');
 if (tab === 'tasks' && sub && TASKS.find((t) => t.id === sub)) selectTask(sub);
 if (tab === 'tasks') startCompare();
+// 첫 방문 안내
+const intro = $('#intro');
+const closeIntro = () => { intro.classList.add('hidden'); localStorage.setItem('mhb-intro', '1'); };
+intro.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go]');
+  if (b) { closeIntro(); setTab(b.dataset.go); }
+  else if (e.target === intro || e.target.id === 'introSkip') closeIntro();
+});
+$('#bTools').onclick = () => { const v = $('#viewTools'); v.classList.toggle('open'); $('#bTools').textContent = v.classList.contains('open') ? '✕ 닫기' : '⚙ 보기 설정'; };
+$('#helpBtn').onclick = () => intro.classList.remove('hidden');
+if (!localStorage.getItem('mhb-intro') && !START_HASH) intro.classList.remove('hidden');
 window.__mhb = { mirror, analyzeHand, stopCompare, state, rig, camera, controls, goPose, setTab, selectTask, setVariant, assess };
 frame();

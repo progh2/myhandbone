@@ -74,7 +74,7 @@ export class HandTracker {
 
   async init() {
     if (this.hand) return;
-    this.onStatus('모델 불러오는 중… (약 8MB, 처음 한 번)');
+    this.onStatus('손 인식 준비 중… (처음 한 번만 약 8MB 내려받아요)');
     const vision = await import(`${MP}/vision_bundle.mjs`);
     this.vision = vision;
     this.fileset = await vision.FilesetResolver.forVisionTasks(`${MP}/wasm`);
@@ -85,9 +85,15 @@ export class HandTracker {
     try { this.hand = await make('GPU'); } catch { this.hand = await make('CPU'); }
   }
 
+  async recreateCPU() {
+    const opts = (model, extra) => ({ baseOptions: { modelAssetPath: model, delegate: 'CPU' }, runningMode: 'VIDEO', ...extra });
+    this.hand = await this.vision.HandLandmarker.createFromOptions(this.fileset, opts(HAND_MODEL, { numHands: 1 }));
+    if (this.pose) this.pose = await this.vision.PoseLandmarker.createFromOptions(this.fileset, opts(POSE_MODEL, { numPoses: 1 }));
+  }
+
   async initPose() {
     if (this.pose) return;
-    this.onStatus('팔 인식 모델 불러오는 중…');
+    this.onStatus('팔 인식 준비 중…');
     const make = (delegate) => this.vision.PoseLandmarker.createFromOptions(this.fileset, {
       baseOptions: { modelAssetPath: POSE_MODEL, delegate }, runningMode: 'VIDEO', numPoses: 1,
     });
@@ -95,16 +101,21 @@ export class HandTracker {
   }
 
   async start() {
-    if (!window.isSecureContext) throw new Error('카메라는 HTTPS 또는 localhost에서만 사용할 수 있습니다.');
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error('이 브라우저는 카메라를 지원하지 않습니다.');
-    await this.init();
-    if (this.useWrist) await this.initPose();
+    if (!window.isSecureContext) throw new Error('카메라는 https 주소에서만 쓸 수 있어요.');
+    if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no-gum'), { name: 'NoGetUserMedia' });
+    // 1) 버튼을 누른 직후 바로 카메라부터 요청 (모바일 사파리는 사용자 동작과 가까울수록 안정적)
     this.onStatus('카메라 권한을 허용해 주세요…');
     this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     this.video.srcObject = this.stream;
-    await this.video.play();
-    this.overlay.width = this.video.videoWidth;
-    this.overlay.height = this.video.videoHeight;
+    this.video.setAttribute('playsinline', '');
+    this.video.muted = true;
+    await this.video.play().catch(() => {});
+    // 2) 그다음 인식 모델 불러오기
+    await this.init();
+    if (this.useWrist) await this.initPose();
+    if (!this.stream) return; // 로딩 중에 꺼진 경우
+    this.overlay.width = this.video.videoWidth || 640;
+    this.overlay.height = this.video.videoHeight || 480;
     this.running = true;
     this.onStatus('손을 카메라에 보여 주세요 ✋');
     this.loop();
@@ -120,7 +131,7 @@ export class HandTracker {
 
   async setWrist(on) {
     this.useWrist = on;
-    if (on && this.running) { await this.initPose(); this.onStatus('팔꿈치까지 화면에 보이게 해 주세요'); }
+    if (on && this.running) { await this.initPose(); this.onStatus('팔꿈치까지 화면에 나오게 해 주세요'); }
   }
 
   loop = () => {
@@ -129,10 +140,22 @@ export class HandTracker {
     if (v.readyState >= 2 && v.currentTime !== this.lastVideoTime) {
       this.lastVideoTime = v.currentTime;
       const now = performance.now();
-      const res = this.hand.detectForVideo(v, now);
-      let poseRes = null;
-      if (this.useWrist && this.pose) poseRes = this.pose.detectForVideo(v, now);
-      this.handle(res, poseRes);
+      try {
+        const res = this.hand.detectForVideo(v, now);
+        let poseRes = null;
+        if (this.useWrist && this.pose) poseRes = this.pose.detectForVideo(v, now);
+        this.handle(res, poseRes);
+      } catch (e) {
+        // 일부 휴대폰은 GPU 모드에서 실패 → CPU 모드로 다시 시도
+        console.warn(e);
+        if (!this.cpuFallback) {
+          this.cpuFallback = true;
+          this.running = false;
+          this.onStatus('호환 모드로 다시 준비하는 중…');
+          this.recreateCPU().then(() => { this.running = true; this.loop(); }).catch((err) => this.onStatus(`인식 오류: ${err.message}`));
+          return;
+        }
+      }
     }
     requestAnimationFrame(this.loop);
   };

@@ -29,13 +29,14 @@
       <p>개발자와 디자이너의 손목을 뼈로 들여다보기</p>
     </div>
     <nav class="tabs" id="tabs">
-      <button data-tab="tasks" class="on">작업 자세</button>
-      <button data-tab="mirror">📷 내 손 미러</button>
-      <button data-tab="conditions">통증·질환</button>
-      <button data-tab="exercise">스트레칭</button>
-      <button data-tab="touch">만져보기</button>
-      <button data-tab="game">골절 찾기</button>
-      <button data-tab="desk">내 책상</button>
+      <button data-tab="tasks" class="on">🖐 자세 비교</button>
+      <button data-tab="mirror">📷 내 손 비추기</button>
+      <button data-tab="conditions">🩹 아픈 곳</button>
+      <button data-tab="exercise">🙆 스트레칭</button>
+      <button data-tab="touch">👆 만져보기</button>
+      <button data-tab="game">🦴 뼈 찾기 게임</button>
+      <button data-tab="desk">🪑 책상 점검</button>
+      <button class="help-btn" id="helpBtn" title="사용법">?</button>
     </nav>
   </header>
 
@@ -43,32 +44,39 @@
     <section class="stage" id="stage">
       <canvas id="c"></canvas>
       <div class="hud" id="hud">
+        <div class="hud-level" id="hudLevel"></div>
         <div class="hud-angles" id="hudAngles"></div>
-        <div class="gauge">
-          <div class="gauge-label">손목터널 압력 <small>(추정)</small> <b id="pVal">0</b> mmHg</div>
-          <div class="gauge-bar"><i id="pBar"></i><span class="gauge-th" title="30 mmHg"></span></div>
+        <button class="hud-more" id="hudMore">자세히 ▾</button>
+        <div class="hud-detail">
+          <div class="gauge">
+            <div class="gauge-label">손목 속 압력 <b id="pVal">0</b> <small>mmHg · 낮을수록 좋아요 (흰 선 = 주의 기준)</small></div>
+            <div class="gauge-bar"><i id="pBar"></i><span class="gauge-th"></span></div>
+          </div>
+          <div class="risks" id="risks"></div>
+          <p class="hud-note">숫자는 연구를 참고한 대략적인 추정이에요.</p>
         </div>
-        <div class="risks" id="risks"></div>
       </div>
       <div class="tooltip" id="tooltip"></div>
-      <div class="view-tools">
+      <div class="view-tools" id="viewTools">
+        <button id="bTools" class="ghost tools-toggle">⚙ 보기 설정</button>
         <label><input type="checkbox" id="tSkin" checked /> 피부</label>
         <label><input type="checkbox" id="tTendon" checked /> 힘줄</label>
         <label><input type="checkbox" id="tNerve" checked /> 신경</label>
-        <label><input type="checkbox" id="tHeat" checked /> 위험 부위</label>
-        <label><input type="checkbox" id="tProps" checked /> 소품</label>
-        <button id="bManual" class="ghost">🎛 직접 조작</button>
-        <button id="bReset" class="ghost">⟲ 시점</button>
+        <label><input type="checkbox" id="tHeat" checked /> 아픈 곳 빨갛게</label>
+        <label><input type="checkbox" id="tProps" checked /> 물건</label>
+        <button id="bManual" class="ghost">🎛 직접 움직이기</button>
+        <button id="bReset" class="ghost">⟲ 처음 시점</button>
+        <span class="drag-hint">드래그: 돌리기 · 휠/두 손가락: 확대</span>
       </div>
       <div class="manual hidden" id="manual">
-        <div class="manual-head">직접 움직여 보기 <button class="x" id="manualClose">×</button></div>
-        <label>손목 굽힘 ↔ 젖힘 <output id="oWf"></output><input type="range" id="sWf" min="-80" max="80" step="1" /></label>
-        <label>요측(엄지쪽) ↔ 척측(새끼쪽) <output id="oWd"></output><input type="range" id="sWd" min="-25" max="40" step="1" /></label>
-        <label>전완 회전 (엎침 → 뒤침) <output id="oSup"></output><input type="range" id="sSup" min="0" max="180" step="1" /></label>
-        <label>손가락 쥐기 <output id="oGrip"></output><input type="range" id="sGrip" min="0" max="100" step="1" /></label>
-        <label>엄지 굽힘 <output id="oThumb"></output><input type="range" id="sThumb" min="-10" max="80" step="1" /></label>
-        <label>쥐는 힘 · 긴장 <output id="oLoad"></output><input type="range" id="sLoad" min="0" max="100" step="1" /></label>
-        <p class="hint">각도를 바꾸면 왼쪽 위 압력·위험도가 실시간으로 바뀝니다.</p>
+        <div class="manual-head">손을 직접 움직여 보기 <button class="x" id="manualClose">×</button></div>
+        <label>손목 안으로 굽힘 ↔ 뒤로 젖힘 <output id="oWf"></output><input type="range" id="sWf" min="-80" max="80" step="1" /></label>
+        <label>엄지 쪽 ↔ 새끼 쪽으로 휨 <output id="oWd"></output><input type="range" id="sWd" min="-25" max="40" step="1" /></label>
+        <label>손바닥 방향 (아래 → 위) <output id="oSup"></output><input type="range" id="sSup" min="0" max="180" step="1" /></label>
+        <label>주먹 쥐기 <output id="oGrip"></output><input type="range" id="sGrip" min="0" max="100" step="1" /></label>
+        <label>엄지 접기 <output id="oThumb"></output><input type="range" id="sThumb" min="-10" max="80" step="1" /></label>
+        <label>꽉 쥐는 힘 <output id="oLoad"></output><input type="range" id="sLoad" min="0" max="100" step="1" /></label>
+        <p class="hint">움직이면 왼쪽 위 "손목 부담"이 바로 바뀌어요.</p>
       </div>
       <div class="step-banner hidden" id="stepBanner"></div>
       <div class="cam hidden" id="camBox">
@@ -80,7 +88,7 @@
 
     <aside class="panel" id="panel">
       <div class="tab-page on" data-page="tasks">
-        <p class="lead">작업을 고르면 3D 손이 그 자세를 취합니다. <b>흔한 자세</b>와 <b>권장 자세</b>를 번갈아 비교해 보세요.</p>
+        <p class="lead">무엇을 할 때 손이 아픈가요? 하나를 고르면 3D 손이 그 자세를 보여 줘요. <b>😣 아픈 자세</b>와 <b>😌 좋은 자세</b>를 비교해 보세요.</p>
         <div class="cards" id="taskCards"></div>
         <div id="taskDetail"></div>
       </div>
@@ -88,24 +96,24 @@
       <div class="tab-page" data-page="mirror">
         <div class="placard">
           <div class="placard-head"><span>✋</span> MIRROR</div>
-          <div class="placard-body">카메라에 손을 비추면 3D 뼈가 내 손과 똑같이 움직입니다.<br /><small>영상은 이 기기 안에서만 처리되며 저장·전송되지 않습니다.</small></div>
+          <div class="placard-body">카메라에 손을 비추면 3D 뼈가 내 손을 따라 움직여요.<br /><small>🔒 영상은 내 기기 안에서만 쓰이고, 어디에도 저장·전송되지 않아요.</small></div>
         </div>
         <div class="row">
           <button class="btn" id="camBtn">📷 카메라 켜기</button>
-          <button class="btn alt" id="camSwap" title="오른손인데 왼손처럼 보이면 눌러 주세요">⇄ 좌우 손 바꾸기</button>
+          <button class="btn alt" id="camSwap" title="오른손인데 왼손처럼 보이면 눌러 주세요">⇄ 왼손·오른손이 반대예요</button>
         </div>
-        <label class="autoplay" style="margin-top:10px"><input type="checkbox" id="camWrist" /> 손목 각도도 측정 (팔 인식 · 팔꿈치까지 화면에 보이게 · 더 무거움)</label>
-        <p class="small" id="camMsg">밝은 곳에서, 카메라와 40~60cm 거리, 손 전체가 화면에 들어오게 해 주세요.</p>
+        <label class="autoplay" style="margin-top:10px"><input type="checkbox" id="camWrist" /> 손목 각도도 재기 (팔꿈치까지 화면에 나와야 해요 · 조금 느려질 수 있어요)</label>
+        <p class="small" id="camMsg">밝은 곳에서, 카메라와 40~60cm 떨어져 손 전체가 화면에 나오게 해 주세요. 휴대폰도 돼요!</p>
 
         <div class="box">
-          <h3>📐 내 손가락 각도</h3>
+          <h3>📐 지금 내 손가락이 굽은 정도</h3>
           <table class="angles" id="angleTable"><tr><td>카메라를 켜고 손을 보여 주면 관절 각도가 표시됩니다.</td></tr></table>
           <p class="small" id="wristRead"></p>
         </div>
 
         <div class="box">
-          <h3>🎯 따라하기 채점 · 힘줄 활주 운동</h3>
-          <p class="small">목표 자세를 만들고 1초 유지하면 성공! 다음 자세로 넘어갑니다.</p>
+          <h3>🎯 손 모양 따라 하기 게임</h3>
+          <p class="small">아래 손 모양을 만들고 1초 버티면 성공! 75점이 넘으면 초록색이 돼요.</p>
           <div class="steps" id="mTargets"></div>
           <div class="target-desc" id="mTargetDesc"></div>
           <div class="score-big"><b id="mScore">–</b><span>점</span></div>
@@ -116,26 +124,26 @@
         <div class="box">
           <h3>💡 해 보세요</h3>
           <ul>
-            <li>주먹을 천천히 쥐었다 펴며 힘줄이 손목터널을 지나 미끄러지는 모습을 보세요.</li>
-            <li>손목 각도 모드를 켜고 손목을 뒤로 젖혀 보세요. 손목터널 압력 게이지가 올라갑니다.</li>
-            <li>마우스를 쥐듯 손을 만들어 보고, 평소 습관이 어떤 각도인지 확인해 보세요.</li>
+            <li>주먹을 천천히 쥐었다 펴 보세요. 하얀 힘줄이 손목을 지나 미끄러지는 게 보여요.</li>
+            <li>"손목 각도도 재기"를 켜고 손목을 뒤로 젖혀 보세요. 왼쪽 위 "손목 부담"이 올라가요.</li>
+            <li>평소 마우스 쥐는 손 모양을 만들어 보고, 손가락이 얼마나 굽어 있는지 확인해 보세요.</li>
           </ul>
         </div>
       </div>
 
       <div class="tab-page" data-page="conditions">
-        <p class="lead">개발자·디자이너에게 흔한 손·손목 통증입니다. 카드를 누르면 관련 구조가 3D에서 빛납니다.</p>
+        <p class="lead">어디가 어떻게 아픈가요? 비슷한 걸 누르면 원인과 예방법을 알려 주고, 3D에서 그 부위가 빛나요.</p>
         <div class="cond-list" id="condList"></div>
         <div id="condDetail"></div>
       </div>
 
       <div class="tab-page" data-page="exercise">
-        <p class="lead">3D 손을 따라 해 보세요. 통증이 없는 범위에서 부드럽게.</p>
+        <p class="lead">3D 손을 보면서 따라 해 보세요. 아프지 않을 만큼만, 천천히!</p>
         <div class="cards" id="exCards"></div>
         <div id="exDetail"></div>
         <div class="box">
-          <h3>⏱ 마이크로 브레이크 알림</h3>
-          <p class="small">정해진 시간마다 알림을 보내고 힘줄 활주 운동을 재생합니다. (이 탭이 열려 있어야 동작)</p>
+          <h3>⏱ 쉬는 시간 알림</h3>
+          <p class="small">정해 둔 시간마다 "쉬세요" 알림을 띄우고 스트레칭을 틀어 줘요. (이 창을 열어 둬야 해요)</p>
           <div class="row">
             <label>간격 <select id="breakMin"><option>20</option><option selected>30</option><option>45</option><option>60</option></select> 분</label>
             <button id="breakBtn" class="btn">시작</button>
@@ -147,7 +155,7 @@
       <div class="tab-page" data-page="touch">
         <div class="placard">
           <div class="placard-head"><span>✋</span> TOUCH</div>
-          <div class="placard-body">지금 내 손을 직접 만져 보세요. 화면 속 뼈가 바로 그 아래에 있습니다.</div>
+          <div class="placard-body">지금 내 손을 직접 만져 보세요. 카드를 누르면 화면 속 그 뼈가 빛나요.</div>
         </div>
         <div id="touchCards" class="touch-list"></div>
         <div class="box">
@@ -156,7 +164,7 @@
         </div>
         <div class="box">
           <h3>🦴 뼈 목록</h3>
-          <p class="small">3D 화면에서 뼈를 클릭해도 설명이 나옵니다.</p>
+          <p class="small">3D 화면에서 뼈를 눌러도 설명이 나와요.</p>
           <div id="boneList" class="bone-list"></div>
         </div>
       </div>
@@ -166,19 +174,19 @@
           <div class="placard-head"><span>✋</span> TOUCH</div>
           <div class="placard-body">Feel the hand. Can you tell where the bone is broken?<br /><small>손을 돌려 보세요. 어디가 부러졌을까요?</small></div>
         </div>
-        <p class="small">맨체스터 전시의 축구선수 발 뼈 부스에서 영감을 받은 미니 게임. 뼈 하나에 금이 가 있습니다. 화면을 돌려 찾아 클릭하세요.</p>
+        <p class="small">맨체스터 전시의 "축구선수 발 뼈 만져보기"에서 따온 게임이에요. 뼈 하나에 검은 금이 가 있어요. 손을 돌려 보며 찾아서 누르세요!</p>
         <div class="row"><button class="btn" id="gameStart">새 문제</button> <span id="gameScore" class="mono"></span></div>
         <div id="gameMsg" class="game-msg"></div>
       </div>
 
       <div class="tab-page" data-page="desk">
         <div class="box">
-          <h3>✅ 내 작업환경 점검</h3>
+          <h3>✅ 내 책상 점검하기</h3>
           <div class="score"><b id="deskScore">0</b> / <span id="deskTotal"></span></div>
           <div id="checklist" class="checklist"></div>
         </div>
         <div class="box">
-          <h3>⌨️ 내 손가락의 하루</h3>
+          <h3>⌨️ 내 손가락은 하루에 얼마나 일할까?</h3>
           <div class="calc">
             <label>타자 속도 <input type="number" id="cSpeed" value="300" min="50" max="1200" /> 타/분</label>
             <label>하루 실제 타이핑 <input type="number" id="cHours" value="2.5" step="0.5" min="0.5" max="14" /> 시간</label>
@@ -189,10 +197,26 @@
       </div>
 
       <footer class="disclaimer">
-        이 사이트는 교육용 시각화입니다. 뼈 모델과 압력·위험도 수치는 연구를 바탕으로 한 <b>단순화된 근사치</b>이며 의학적 진단을 대신하지 않습니다. 증상이 지속되면 전문의와 상담하세요.
+        공부용으로 만든 사이트예요. 뼈 모양과 숫자는 <b>대략적인 추정</b>이라 진단을 대신할 수 없어요. 계속 아프면 병원에 가 보세요.
       </footer>
     </aside>
   </main>
+
+  <div class="intro hidden" id="intro">
+    <div class="intro-card">
+      <div class="intro-hand">✋🦴</div>
+      <h2>내 손목, 뼈로 들여다볼까요?</h2>
+      <p>컴퓨터·스마트폰을 많이 쓰는 손이 왜 아픈지, 어떻게 쓰면 덜 아픈지 3D 손뼈로 보여 드려요.</p>
+      <div class="intro-choices">
+        <button data-go="tasks"><b>🖐 내 자세 점검하기</b><span>키보드·마우스·폰 쓸 때 아픈 자세 vs 좋은 자세</span></button>
+        <button data-go="mirror"><b>📷 카메라로 내 손 비추기</b><span>내 손을 따라 움직이는 뼈 보기</span></button>
+        <button data-go="exercise"><b>🙆 1분 손 스트레칭</b><span>따라 하기만 하면 끝</span></button>
+        <button data-go="conditions"><b>🩹 지금 아픈 곳이 있어요</b><span>저림·통증별 원인과 예방법</span></button>
+      </div>
+      <p class="intro-tip">💡 3D 손은 손가락으로 돌리고, 두 손가락으로 확대할 수 있어요. 뼈를 누르면 이름이 나와요.</p>
+      <button class="intro-skip" id="introSkip">그냥 둘러볼게요</button>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

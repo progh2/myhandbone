@@ -191,3 +191,53 @@ select, input[type=number] { background: #00000040; color: var(--text); border: 
 .finger-scores i b { display: block; height: 100%; background: var(--good); }
 .steps span { cursor: pointer; }
 @media (max-width: 900px) { .cam { width: 140px; right: 8px; top: 8px; } }
+
+/* 쉬운 HUD */
+.hud { pointer-events: auto; }
+.hud-level { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.hud-level > span { font-size: 30px; line-height: 1; }
+.hud-level b { display: block; font-size: 15px; }
+.hud-level small { color: var(--mute); font-size: 12px; }
+.hud-level.good b { color: var(--good); }
+.hud-level.mid b { color: #ffd24a; }
+.hud-level.bad b { color: var(--bad); }
+.hud-more { background: none; border: 0; color: var(--orange); font-size: 12px; padding: 4px 0 0; }
+.hud-detail { display: none; margin-top: 8px; }
+.hud.open .hud-detail { display: block; }
+.hud-note { margin: 8px 0 0; color: #8f7c8e; font-size: 11px; }
+.gauge-label small { color: var(--mute); display: block; font-size: 11px; }
+.drag-hint { color: #8f7c8e; font-size: 12px; margin-left: auto; }
+.infocard .ic-sub { color: #8a6a8c; font-size: 12px; margin: -4px 0 6px; }
+.cam-err { color: #ffb4a8; }
+.cam-err a { color: var(--orange); font-weight: 700; }
+.help-btn { width: 32px; padding: 0 !important; font-weight: 800; }
+
+/* 첫 방문 안내 */
+.intro { position: fixed; inset: 0; z-index: 20; background: #0d060fd9; backdrop-filter: blur(6px); display: grid; place-items: center; padding: 16px; animation: fade .3s; }
+.intro-card { width: min(560px, 100%); max-height: 92vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 26px 24px 18px; text-align: center; box-shadow: 0 20px 60px #000a; }
+.intro-hand { font-size: 44px; }
+.intro h2 { margin: 6px 0 8px; font-size: 22px; }
+.intro p { color: var(--mute); line-height: 1.6; margin: 0 0 16px; font-size: 14.5px; }
+.intro-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.intro-choices button { text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; color: var(--text); }
+.intro-choices button:hover { border-color: var(--orange); }
+.intro-choices b { display: block; font-size: 15px; margin-bottom: 4px; }
+.intro-choices span { font-size: 12.5px; color: var(--mute); }
+.intro-tip { margin: 16px 0 6px !important; font-size: 13px !important; }
+.intro-skip { background: none; border: 0; color: var(--mute); text-decoration: underline; padding: 8px; }
+@media (max-width: 900px) {
+  .intro-choices { grid-template-columns: 1fr; }
+  .drag-hint { display: none; }
+  .hud-level > span { font-size: 24px; }
+  .hud-level b { font-size: 13px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 2px; scrollbar-width: none; }
+  .tabs button { flex: none; }
+}
+
+.tools-toggle { display: none; }
+@media (max-width: 900px) {
+  .tools-toggle { display: inline-block; }
+  .view-tools > label, .view-tools > #bManual, .view-tools > #bReset { display: none; }
+  .view-tools.open > label, .view-tools.open > #bManual, .view-tools.open > #bReset { display: inline-block; }
+  .view-tools.open { background: #120a14e6; padding: 8px; border-radius: 14px; }
+}
